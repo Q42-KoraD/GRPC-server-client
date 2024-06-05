@@ -20,7 +20,7 @@ type Server struct {
 
 func (s *Server) SayHello(ctx context.Context, in *pb.Message) (*pb.Message, error) {
 	log.Printf("RECEIVED MESSAGE BODY FROM CLIENT: %s", in.Body)
-	return &pb.Message{Body: "The current version of this server is: BLUE"}, nil
+	return &pb.Message{Body: "The current version of this server is: GREEN"}, nil
 }
 
 func main() {
