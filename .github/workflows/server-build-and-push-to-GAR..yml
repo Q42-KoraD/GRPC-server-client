@@ -1,0 +1,59 @@
+on:
+  pull_request:
+    types: [closed]
+
+jobs:
+  Build-and-push-to-GCC:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-22.04
+    env:
+      IMAGE_NAME: hue-intern
+      PROJECT_ID: stage-kora-dokbua
+      REGION: europe-west4
+      GAR_LOCATION: europe-west4-docker.pkg.dev/stage-kora-dokbua/hue-intern
+      SHA: ${{ github.sha }}
+
+    steps:
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - id: auth
+        uses: google-github-actions/auth@v2.1.2
+        with:
+          credentials_json: ${{ secrets.SERVICE_ACCOUNT_KEY }}
+
+      - name: authenticate to GAR
+        run: gcloud auth configure-docker \europe-west4-docker.pkg.dev
+
+      - uses: google-github-actions/setup-gcloud@v2.1.0
+        with:
+          service_account_key: ${{ secrets.SERVICE_ACCOUNT_KEY }}
+          project_id: ${{ env.PROJECT_ID }}
+          export_default_credentials: true
+
+      - name: Docker auth
+        run: |-
+          gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev/stage-kora-dokbua/hue-intern --quiet
+
+      - name: Build image
+        run: docker build -t hue-intern-server -f dockerfile.server .
+
+      - name: Docker tag
+        run: docker tag hue-intern-server ${{ env.GAR_LOCATION }}/hue-intern:${{ env.SHA }}
+
+      - name: Push Docker Image to Artifact Registry
+        run: docker push ${{ env.GAR_LOCATION }}/hue-intern:${{ env.SHA}}
+
+      - name: Update the GitOps-GRPC-Server repository
+        run: |
+          git clone https://${{ secrets.NAME }}:${{ secrets.PERSONAL_ACCESS_TOKEN }}@github.com/Q42-KoraD/GitOps-GRPC-Server.git
+          pwd
+          cd /home/runner/work/hue-intern-golang/hue-intern-golang/GitOps-GRPC-Server
+          sed -i 's#image: .*#image: europe\-west4\-docker\.pkg\.dev\/stage-kora-dokbua\/hue-intern\/hue-intern:${{ env.SHA }}#' rollout.yaml
+          git config --global user.email "${{ secrets.USER_EMAIL }}"
+          git config --global user.name "${{ secrets.NAME }}"
+          git remote set-url origin https://${{ secrets.NAME }}:${{ secrets.PERSONAL_ACCESS_TOKEN }}@github.com/Q42-KoraD/GitOps-GRPC-Server.git
+          git add -A
+          git commit -m "update GitOps-GRPC-Server repo"
+          git push --set-upstream origin master
